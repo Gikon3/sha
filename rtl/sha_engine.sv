@@ -58,8 +58,9 @@ module sha_engine (
 
     logic               request;
     sha::mode_t         mode;
-    logic[63:0]         next_w;
-    logic[15:0][63:0]   w;
+    sha::word_t         next_w_plus;
+    sha::word_t         next_w;
+    sha::word_t[15:0]   w;
     logic               mode_2_32;
     logic               mode_2_64;
     logic               cnt_en;
@@ -130,12 +131,13 @@ module sha_engine (
         else if(cnt_en) cnt <= cnt + 'd1;
 
     always_comb begin
+        next_w_plus =  w[0] + w[9];
         if(cnt >= 'd15 && (mode == sha::sha224 || mode == sha::sha256)) begin
             next_w[63:32] = 'd0;
-            next_w[31:0] = w[0][31:0] + sha::delta0_32(w[1][31:0]) + w[9][31:0] + sha::delta1_32(w[14][31:0]);
+            next_w[31:0] = sha::delta0_32(w[1]) + sha::delta1_32(w[14]) + next_w_plus;
         end
         else if(cnt >= 'd15 && (mode == sha::sha384 || mode == sha::sha512))
-            next_w[63:0] = w[0] + sha::delta0_64(w[1]) + w[9] + sha::delta1_64(w[14]);
+            next_w[63:0] =sha::delta0_64(w[1]) + sha::delta1_64(w[14]) + next_w_plus;
         else
             next_w = 'd0;
     end
@@ -150,7 +152,6 @@ module sha_engine (
         unique case(mode)
             sha::sha1: begin
                  sha_mainloop_if_h.master.k = 'd0;
-                 sha_mainloop_if_h.master.w = 'd0;
             end
             sha::sha224,
             sha::sha256: begin
@@ -187,54 +188,22 @@ module sha_engine (
     );
 
     always_comb begin
+        hash = 'd0;
         unique case(mode)
             sha::sha1:
                 hash = 'd0;
             sha::sha224:
-                hash = {
-                    288'd0,
-                    H224[0] + sha_mainloop_if_h.master.ripe.ch.a,
-                    H224[1] + sha_mainloop_if_h.master.ripe.ch.b,
-                    H224[2] + sha_mainloop_if_h.master.ripe.ch.c,
-                    H224[3] + sha_mainloop_if_h.master.ripe.ch.d,
-                    H224[4] + sha_mainloop_if_h.master.ripe.ch.e,
-                    H224[5] + sha_mainloop_if_h.master.ripe.ch.f,
-                    H224[6] + sha_mainloop_if_h.master.ripe.ch.g
-                };
+                for(int i = 0; i < 7; ++i)
+                    hash.w32[6-i] = H224[i] + sha_mainloop_if_h.master.ripe.w[i];
             sha::sha256:
-                hash = {
-                    256'd0,
-                    H256[0] + sha_mainloop_if_h.master.ripe.ch.a[31:0],
-                    H256[1] + sha_mainloop_if_h.master.ripe.ch.b[31:0],
-                    H256[2] + sha_mainloop_if_h.master.ripe.ch.c[31:0],
-                    H256[3] + sha_mainloop_if_h.master.ripe.ch.d[31:0],
-                    H256[4] + sha_mainloop_if_h.master.ripe.ch.e[31:0],
-                    H256[5] + sha_mainloop_if_h.master.ripe.ch.f[31:0],
-                    H256[6] + sha_mainloop_if_h.master.ripe.ch.g[31:0],
-                    H256[7] + sha_mainloop_if_h.master.ripe.ch.h[31:0]
-                };
+                for(int i = 0; i < 8; ++i)
+                    hash.w32[7-i] = H256[i] + sha_mainloop_if_h.master.ripe.w[i];
             sha::sha384:
-                hash = {
-                    128'd0,
-                    H384[0] + sha_mainloop_if_h.master.ripe.ch.a,
-                    H384[1] + sha_mainloop_if_h.master.ripe.ch.b,
-                    H384[2] + sha_mainloop_if_h.master.ripe.ch.c,
-                    H384[3] + sha_mainloop_if_h.master.ripe.ch.d,
-                    H384[4] + sha_mainloop_if_h.master.ripe.ch.e,
-                    H384[5] + sha_mainloop_if_h.master.ripe.ch.f,
-                    H384[6] + sha_mainloop_if_h.master.ripe.ch.g
-                };
+                for(int i = 0; i < 7; ++i)
+                    hash.w64[6-i] = H384[i] + sha_mainloop_if_h.master.ripe.w[i];
             sha::sha512:
-                hash = {
-                    H512[0] + sha_mainloop_if_h.master.ripe.ch.a,
-                    H512[1] + sha_mainloop_if_h.master.ripe.ch.b,
-                    H512[2] + sha_mainloop_if_h.master.ripe.ch.c,
-                    H512[3] + sha_mainloop_if_h.master.ripe.ch.d,
-                    H512[4] + sha_mainloop_if_h.master.ripe.ch.e,
-                    H512[5] + sha_mainloop_if_h.master.ripe.ch.f,
-                    H512[6] + sha_mainloop_if_h.master.ripe.ch.g,
-                    H512[7] + sha_mainloop_if_h.master.ripe.ch.h
-                };
+                for(int i = 0; i < 8; ++i)
+                    hash.w64[7-i] = H512[i] + sha_mainloop_if_h.master.ripe.w[i];
         endcase
     end
 
