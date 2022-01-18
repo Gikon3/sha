@@ -39,16 +39,7 @@ module sha_mainloop (sha_mainloop_if.slave bus);
                 next_words.ch.h = 0;
             end
             sha::sha224,
-            sha::sha256: begin
-                next_words.ch.a = temp1 + temp2;
-                next_words.ch.b = bus.raw.ch.a;
-                next_words.ch.c = bus.raw.ch.b;
-                next_words.ch.d = bus.raw.ch.c;
-                next_words.ch.e = bus.raw.ch.d + temp1;
-                next_words.ch.f = bus.raw.ch.e;
-                next_words.ch.g = bus.raw.ch.f;
-                next_words.ch.h = bus.raw.ch.g;
-            end
+            sha::sha256,
             sha::sha384,
             sha::sha512: begin
                 next_words.ch.a = temp1 + temp2;
@@ -64,11 +55,7 @@ module sha_mainloop (sha_mainloop_if.slave bus);
     end
 
     always_ff @ (posedge bus.clk, negedge bus.rstn)
-        if(~bus.rstn) begin
-            for(int i = 0; i < 8; ++i)
-                bus.ripe.w[i] <= 'd0;
-        end
-        else if(bus.enable)
-            bus.ripe.w <= next_words.w;
+        if(~bus.rstn) bus.ripe <= 'd0;
+        else if(bus.enable) bus.ripe.w <= next_words.w;
 
 endmodule

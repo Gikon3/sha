@@ -7,7 +7,10 @@ package sha;
         sha512
     } mode_t;
 
-    typedef logic[63:0]     word_t;
+    typedef struct packed
+    {
+        logic[1:0][31:0]    w32;
+    } word_t;
 
     typedef union packed
     {

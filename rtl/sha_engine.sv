@@ -133,11 +133,11 @@ module sha_engine (
     always_comb begin
         next_w_plus =  w[0] + w[9];
         if(cnt >= 'd15 && (mode == sha::sha224 || mode == sha::sha256)) begin
-            next_w[63:32] = 'd0;
-            next_w[31:0] = sha::delta0_32(w[1]) + sha::delta1_32(w[14]) + next_w_plus;
+            next_w.w32[1] = 'd0;
+            next_w.w32[0] = sha::delta0_32(w[1]) + sha::delta1_32(w[14]) + next_w_plus;
         end
         else if(cnt >= 'd15 && (mode == sha::sha384 || mode == sha::sha512))
-            next_w[63:0] =sha::delta0_64(w[1]) + sha::delta1_64(w[14]) + next_w_plus;
+            next_w =sha::delta0_64(w[1]) + sha::delta1_64(w[14]) + next_w_plus;
         else
             next_w = 'd0;
     end
