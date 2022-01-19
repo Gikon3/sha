@@ -220,8 +220,8 @@ always_comb begin
             for(int i = 0; i < 8; ++i)
                 hash.w32[7-i] = H256[i] + sha_mainloop_if_h.master.ripe.w[i];
         sha::sha384:
-            for(int i = 0; i < 7; ++i)
-                hash.w64[6-i] = H384[i] + sha_mainloop_if_h.master.ripe.w[i];
+            for(int i = 0; i < 6; ++i)
+                hash.w64[5-i] = H384[i] + sha_mainloop_if_h.master.ripe.w[i];
         sha::sha512:
             for(int i = 0; i < 8; ++i)
                 hash.w64[7-i] = H512[i] + sha_mainloop_if_h.master.ripe.w[i];
