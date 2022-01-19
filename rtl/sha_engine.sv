@@ -102,7 +102,7 @@ assign req_mode_2_32 = bus.mode == sha::sha224 || bus.mode == sha::sha256;
 assign req_mode_2_64 = bus.mode == sha::sha384 || bus.mode == sha::sha512 ||
         bus.mode == sha::sha512_224 || bus.mode == sha::sha512_256;
 assign mode_2_32 = mode == sha::sha224 || mode == sha::sha256;
-assign mode_2_64 = mode == sha::sha384 || mode == sha::sha256 ||
+assign mode_2_64 = mode == sha::sha384 || mode == sha::sha512 ||
         mode == sha::sha512_224 || mode == sha::sha512_256;
 always_comb begin
     unique case(state)
