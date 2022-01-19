@@ -41,6 +41,7 @@ module tb_engine;
         @(posedge sha_engine_if_h.master.clk);
         #1;
         sha_engine_if_h.send(sha::sha256, 512'h68656C6C6F20776F726C64, 11);
+        sha_engine_if_h.send(sha::sha512_224, 1024'h636F707320717565657273, 11);
         wait(sha_engine_if_h.master.ready == 1'b1);
 
         repeat(10) @(posedge sha_engine_if_h.master.clk);

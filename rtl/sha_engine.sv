@@ -27,6 +27,14 @@ module sha_engine (
         64'h6A09E667F3BCC908, 64'hBB67AE8584CAA73B, 64'h3C6EF372FE94F82B, 64'hA54FF53A5F1D36F1,
         64'h510E527FADE682D1, 64'h9B05688C2B3E6C1F, 64'h1F83D9ABFB41BD6B, 64'h5BE0CD19137E2179
     };
+    localparam bit[0:7][63:0] H512_224 = {
+        64'h8C3D37C819544DA2, 64'h73E1996689DCD4D6, 64'h1DFAB7AE32FF9C82, 64'h679DD514582F9FCF,
+        64'h0F6D2B697BD44DA8, 64'h77E36F7304C48942, 64'h3F9D85A86A1D36C8, 64'h1112E6AD91D692A1
+    };
+    localparam bit[0:7][63:0] H512_256 = {
+        64'h22312194FC2BF72C, 64'h9F555FA3C84C64C2, 64'h2393B86B6F53B151, 64'h963877195940EABD,
+        64'h96283EE2A88EFFE3, 64'hBE5E1E2553863992, 64'h2B0199FC2C85B8AA, 64'h0EB72DDC81C52CA2
+    };
     localparam bit[0:79][63:0] K512 = {
         64'h428A2F98D728AE22, 64'h7137449123EF65CD, 64'hB5C0FBCFEC4D3B2F, 64'hE9B5DBA58189DBBC,
         64'h3956C25BF348B538, 64'h59F111F1B605D019, 64'h923F82A4AF194F9B, 64'hAB1C5ED5DA6D8118,
@@ -58,11 +66,13 @@ module sha_engine (
 
     logic               request;
     sha::mode_t         mode;
+    logic               mode_2_32;
+    logic               mode_2_64;
     sha::word_t         next_w_plus;
     sha::word_t         next_w;
     sha::word_t[15:0]   w;
-    logic               mode_2_32;
-    logic               mode_2_64;
+    logic               req_mode_2_32;
+    logic               req_mode_2_64;
     logic               cnt_en;
     logic[6:0]          cnt;
     sha::hash_t         hash;
@@ -76,25 +86,30 @@ module sha_engine (
     always_ff @ (posedge bus.clk, negedge bus.rstn)
         if(~bus.rstn) mode <= sha::sha1;
         else if(request) mode <= bus.mode;
+    
 
     always_ff @ (posedge bus.clk, negedge bus.rstn)
         if(~bus.rstn) w <= 'd0;
         else if(request) begin
             for(int i = 0; i < 16; ++i) begin
-                if(request & mode_2_32) w[15-i][31:0] <= bus.msg.w32[i];
-                else if(request & mode_2_64) w[15-i] <= bus.msg.w64[i];
+                if(request & req_mode_2_32) w[15-i][31:0] <= bus.msg.w32[i];
+                else if(request & req_mode_2_64) w[15-i] <= bus.msg.w64[i];
             end
         end
         else if(cnt >= 'd15) w <= {next_w, w[15:1]};
 
-    assign mode_2_32 = bus.mode == sha::sha224 || bus.mode == sha::sha256;
-    assign mode_2_64 = bus.mode == sha::sha384 || bus.mode == sha::sha512;
+    assign req_mode_2_32 = bus.mode == sha::sha224 || bus.mode == sha::sha256;
+    assign req_mode_2_64 = bus.mode == sha::sha384 || bus.mode == sha::sha512 ||
+            bus.mode == sha::sha512_224 || bus.mode == sha::sha512_256;
+    assign mode_2_32 = mode == sha::sha224 || mode == sha::sha256;
+    assign mode_2_64 = mode == sha::sha384 || mode == sha::sha256 ||
+            mode == sha::sha512_224 || mode == sha::sha512_256;
     always_comb begin
         unique case(state)
             st_idle:
-                if(bus.valid & mode_2_32)
+                if(bus.valid & req_mode_2_32)
                     next_state = st_loop256;
-                else if(bus.valid & mode_2_64)
+                else if(bus.valid & req_mode_2_64)
                     next_state = st_loop512;
                 else
                     next_state = st_idle;
@@ -110,9 +125,9 @@ module sha_engine (
                     next_state = st_loop512;
             st_load:
                 if(bus.valid) begin
-                    if(mode_2_32)
+                    if(req_mode_2_32)
                         next_state = st_loop256;
-                    else if(mode_2_64)
+                    else if(req_mode_2_64)
                         next_state = st_loop512;
                 end
                 else
@@ -132,11 +147,11 @@ module sha_engine (
 
     always_comb begin
         next_w_plus =  w[0] + w[9];
-        if(cnt >= 'd15 && (mode == sha::sha224 || mode == sha::sha256)) begin
+        if(cnt >= 'd15 && mode_2_32) begin
             next_w.w32[1] = 'd0;
             next_w.w32[0] = sha::delta0_32(w[1]) + sha::delta1_32(w[14]) + next_w_plus;
         end
-        else if(cnt >= 'd15 && (mode == sha::sha384 || mode == sha::sha512))
+        else if(cnt >= 'd15 && mode_2_64)
             next_w =sha::delta0_64(w[1]) + sha::delta1_64(w[14]) + next_w_plus;
         else
             next_w = 'd0;
@@ -158,7 +173,9 @@ module sha_engine (
                 sha_mainloop_if_h.master.k = {32'd0, K256[cnt]};
             end
             sha::sha384,
-            sha::sha512: begin
+            sha::sha512,
+            sha::sha512_224,
+            sha::sha512_256: begin
                 sha_mainloop_if_h.master.k = K512[cnt];
             end
         endcase
@@ -175,6 +192,10 @@ module sha_engine (
                         sha_mainloop_if_h.master.raw.w[i] = H384[i];
                     sha::sha512:
                         sha_mainloop_if_h.master.raw.w[i] = H512[i];
+                    sha::sha512_224:
+                        sha_mainloop_if_h.master.raw.w[i] = H512_224[i];
+                    sha::sha512_256:
+                        sha_mainloop_if_h.master.raw.w[i] = H512_256[i];
                 endcase
             end
         end
@@ -204,6 +225,14 @@ module sha_engine (
             sha::sha512:
                 for(int i = 0; i < 8; ++i)
                     hash.w64[7-i] = H512[i] + sha_mainloop_if_h.master.ripe.w[i];
+            sha::sha512_224: begin
+                for(int i = 0; i < 4; ++i)
+                    hash.w64[3-i] = H512_224[i] + sha_mainloop_if_h.master.ripe.w[i];
+                hash = hash >> 32;
+            end
+            sha::sha512_256:
+                for(int i = 0; i < 4; ++i)
+                    hash.w64[3-i] = H512_256[i] + sha_mainloop_if_h.master.ripe.w[i];
         endcase
     end
 

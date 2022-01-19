@@ -19,7 +19,9 @@ module sha_mainloop (sha_mainloop_if.slave bus);
                 temp2 = sha::sigma0_32(bus.raw.ch.a) + temp2_plus;
             end
             sha::sha384,
-            sha::sha512: begin
+            sha::sha512,
+            sha::sha512_224,
+            sha::sha512_256: begin
                 temp1 = sha::sigma1_64(bus.raw.ch.e) + temp1_plus;
                 temp2 = sha::sigma0_64(bus.raw.ch.a) + temp2_plus;
             end
@@ -41,7 +43,9 @@ module sha_mainloop (sha_mainloop_if.slave bus);
             sha::sha224,
             sha::sha256,
             sha::sha384,
-            sha::sha512: begin
+            sha::sha512,
+            sha::sha512_224,
+            sha::sha512_256: begin
                 next_words.ch.a = temp1 + temp2;
                 next_words.ch.b = bus.raw.ch.a;
                 next_words.ch.c = bus.raw.ch.b;

@@ -4,7 +4,9 @@ package sha;
         sha224,
         sha256,
         sha384,
-        sha512
+        sha512,
+        sha512_224,
+        sha512_256
     } mode_t;
 
     typedef struct packed
