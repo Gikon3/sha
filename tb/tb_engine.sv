@@ -2,17 +2,6 @@ module tb_engine;
 
 localparam Tclk = 10;
 
-bit             check_en;
-sha::hash_t     check_hash;
-int             check_cnt;
-int unsigned    msg_len_tail;
-int unsigned    less;
-
-// initial begin
-//     #(Tclk*10_000);
-//     $finish;
-// end
-
 initial begin
     $shm_open(`TEST_NAME);
     $shm_probe(tb_engine, "ACM");
@@ -35,6 +24,7 @@ initial begin
 end
 
 initial begin
+    // Началные значения, чтобы не ругался uniaue case
     force dut.state = dut.st_idle; release  dut.state;
     force dut.mode = sha::sha1; release  dut.mode;
 end
@@ -60,6 +50,8 @@ to compare favourably with other FPGA-based implementations, achieving the faste
             384'hbfd76c0ebbd006fee583410547c1887b0292be76d582d96c242d2a792723e3fd6fd061f9d5cfd13b8f961358e6adba4a);
     send_msg("Hello World!", sha::sha512_256,
             256'hf371319eee6b39b058ec262d4e723a26710e46761301c8b54c56fa722267581a);
+    #1 wait(sha_engine_if_h.master.ready == 1'b1);
+    repeat(6) @(posedge sha_engine_if_h.master.clk);
     send_msg("Hello World!", sha::sha512_224,
             224'hba0702dd8dd23280b617ef288bcc7e276060b8ebcddf28f8e4356eae);
     send_msg("Hello World!", sha::sha256,
@@ -92,6 +84,18 @@ to compare favourably with other FPGA-based implementations, achieving the faste
     $finish;
 end
 
+localparam bit_in_block512 = 512;
+localparam byte_in_block512 = bit_in_block512 / 8;
+localparam bit_in_block1024 = 1024;
+localparam byte_in_block1024 = bit_in_block1024 / 8;
+bit             check_en;
+sha::hash_t     check_hash;
+int             check_cnt;
+int unsigned    msg_len_tail;
+int unsigned    less;
+int unsigned    num_blocks;
+int unsigned    byte_iter;
+
 initial begin
     check_en = 0;
     check_hash = 'd0;
@@ -108,13 +112,6 @@ initial begin
         end
     end
 end
-
-localparam bit_in_block512 = 512;
-localparam byte_in_block512 = bit_in_block512 / 8;
-localparam bit_in_block1024 = 1024;
-localparam byte_in_block1024 = bit_in_block1024 / 8;
-int unsigned    num_blocks;
-int unsigned    byte_iter;
 
 task send_msg;
     input string        msg;
