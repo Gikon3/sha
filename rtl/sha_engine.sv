@@ -68,6 +68,8 @@ logic               request;
 sha::mode_t         mode;
 logic               mode_2_32;
 logic               mode_2_64;
+sha::word_t[0:7]    next_h_work;
+sha::word_t[0:7]    h_work;
 sha::word_t         next_w_plus;
 sha::word_t         next_w;
 sha::word_t[15:0]   w;
@@ -87,6 +89,40 @@ always_ff @ (posedge bus.clk, negedge bus.rstn)
     if(~bus.rstn) mode <= sha::sha1;
     else if(request) mode <= bus.mode;
 
+always_comb begin
+    next_h_work = 'd0;
+    unique case(mode)
+        sha::sha1:
+            next_h_work = 'd0;
+        sha::sha224,
+        sha::sha256:
+            for(int i = 0; i < 8; ++i)
+                next_h_work[i].w32[0] = h_work[i].w32[0] + sha_mainloop_if_h.master.ripe.w[i];
+        sha::sha384,
+        sha::sha512,
+        sha::sha512_224,
+        sha::sha512_256:
+            for(int i = 0; i < 8; ++i)
+                next_h_work[i] = h_work[i] + sha_mainloop_if_h.master.ripe.w[i];
+    endcase
+end
+
+always_ff @ (posedge bus.clk, negedge bus.rstn)
+    if(~bus.rstn) h_work <= 'd0;
+    else if(request & bus.new_msg) begin
+        for(int i = 0; i < 8; ++i) begin
+            unique case(bus.mode)
+                sha::sha1: h_work <= 'd0;
+                sha::sha224: h_work[i] <= {32'd0, H224[i]};
+                sha::sha256: h_work[i] <= {32'd0, H256[i]};
+                sha::sha384: h_work[i] <= H384[i];
+                sha::sha512: h_work[i] <= H512[i];
+                sha::sha512_224: h_work[i] <= H512_224[i];
+                sha::sha512_256: h_work[i] <= H512_256[i];
+            endcase
+        end
+    end
+    else if(load_hash) h_work <= next_h_work;
 
 always_ff @ (posedge bus.clk, negedge bus.rstn)
     if(~bus.rstn) w <= 'd0;
@@ -179,29 +215,10 @@ always_comb begin
             sha_mainloop_if_h.master.k = K512[cnt];
         end
     endcase
-    if(cnt == 'd0) begin
-        for(int i = 0; i < 8; ++i) begin
-            unique case(mode)
-                sha::sha1:
-                    sha_mainloop_if_h.master.raw.w[i] = 'd0;
-                sha::sha224:
-                    sha_mainloop_if_h.master.raw.w[i] = {32'd0, H224[i]};
-                sha::sha256:
-                    sha_mainloop_if_h.master.raw.w[i] = {32'd0, H256[i]};
-                sha::sha384:
-                    sha_mainloop_if_h.master.raw.w[i] = H384[i];
-                sha::sha512:
-                    sha_mainloop_if_h.master.raw.w[i] = H512[i];
-                sha::sha512_224:
-                    sha_mainloop_if_h.master.raw.w[i] = H512_224[i];
-                sha::sha512_256:
-                    sha_mainloop_if_h.master.raw.w[i] = H512_256[i];
-            endcase
-        end
-    end
-    else begin
+    if(cnt == 'd0)
+        sha_mainloop_if_h.master.raw.w = h_work;
+    else
         sha_mainloop_if_h.master.raw = sha_mainloop_if_h.master.ripe;
-    end
 end
 
 sha_mainloop sha_mainloop (
@@ -215,24 +232,24 @@ always_comb begin
             hash = 'd0;
         sha::sha224:
             for(int i = 0; i < 7; ++i)
-                hash.w32[6-i] = H224[i] + sha_mainloop_if_h.master.ripe.w[i];
+                hash.w32[6-i] = next_h_work[i];
         sha::sha256:
             for(int i = 0; i < 8; ++i)
-                hash.w32[7-i] = H256[i] + sha_mainloop_if_h.master.ripe.w[i];
+                hash.w32[7-i] = next_h_work[i];
         sha::sha384:
             for(int i = 0; i < 6; ++i)
-                hash.w64[5-i] = H384[i] + sha_mainloop_if_h.master.ripe.w[i];
+                hash.w64[5-i] = next_h_work[i];
         sha::sha512:
             for(int i = 0; i < 8; ++i)
-                hash.w64[7-i] = H512[i] + sha_mainloop_if_h.master.ripe.w[i];
+                hash.w64[7-i] = next_h_work[i];
         sha::sha512_224: begin
             for(int i = 0; i < 4; ++i)
-                hash.w64[3-i] = H512_224[i] + sha_mainloop_if_h.master.ripe.w[i];
+                hash.w64[3-i] = next_h_work[i];
             hash = hash >> 32;
         end
         sha::sha512_256:
             for(int i = 0; i < 4; ++i)
-                hash.w64[3-i] = H512_256[i] + sha_mainloop_if_h.master.ripe.w[i];
+                hash.w64[3-i] = next_h_work[i];
     endcase
 end
 
