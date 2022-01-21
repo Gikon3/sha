@@ -62,6 +62,16 @@ package sha;
     end
     endfunction
 
+    function logic[31:0] parity(
+        input logic[31:0]   x,
+        input logic[31:0]   y,
+        input logic[31:0]   z
+    );
+    begin
+        parity = x ^ y ^ z;
+    end
+    endfunction
+
     function logic[31:0] sigma0_32(
         input logic[31:0]   x
     );

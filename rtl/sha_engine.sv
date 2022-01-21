@@ -2,6 +2,13 @@ module sha_engine (
     sha_engine_if.slave bus
 );
 
+localparam bit[0:4][31:0] H1 = {
+    32'h67452301, 32'hEFCDAB89, 32'h98BADCFE, 32'h10325476, 32'hC3D2E1F0
+};
+localparam bit[0:3][31:0] K1 = {
+    32'h5A827999, 32'h6ED9EBA1, 32'h8F1BBCDC, 32'hCA62C1D6
+};
+
 localparam bit[0:7][31:0] H224 = {
     32'hC1059ED8, 32'h367CD507, 32'h3070DD17, 32'hF70E5939, 32'hFFC00B31, 32'h68581511, 32'h64F98FA7, 32'hBEFA4FA4
 };
@@ -66,13 +73,16 @@ sha_mainloop_if sha_mainloop_if_h(.clk(bus.clk), .rstn(bus.rstn));
 
 logic               request;
 sha::mode_t         mode;
+logic               mode_1;
 logic               mode_2_32;
 logic               mode_2_64;
 sha::word_t[0:7]    next_h_work;
 sha::word_t[0:7]    h_work;
+logic[31:0]         next_w_xor;
 sha::word_t         next_w_plus;
 sha::word_t         next_w;
 sha::word_t[15:0]   w;
+logic               req_mode_1;
 logic               req_mode_2_32;
 logic               req_mode_2_64;
 logic               cnt_en;
@@ -92,8 +102,7 @@ always_ff @ (posedge bus.clk, negedge bus.rstn)
 always_comb begin
     next_h_work = 'd0;
     unique case(mode)
-        sha::sha1:
-            next_h_work = 'd0;
+        sha::sha1,
         sha::sha224,
         sha::sha256:
             for(int i = 0; i < 8; ++i)
@@ -112,7 +121,11 @@ always_ff @ (posedge bus.clk, negedge bus.rstn)
     else if(request & bus.new_msg) begin
         for(int i = 0; i < 8; ++i) begin
             unique case(bus.mode)
-                sha::sha1: h_work <= 'd0;
+                sha::sha1:
+                    if(i < 5)
+                        h_work[i] <= {32'd0, H1[i]};
+                    else
+                        h_work[i] <= 64'd0;
                 sha::sha224: h_work[i] <= {32'd0, H224[i]};
                 sha::sha256: h_work[i] <= {32'd0, H256[i]};
                 sha::sha384: h_work[i] <= H384[i];
@@ -128,15 +141,17 @@ always_ff @ (posedge bus.clk, negedge bus.rstn)
     if(~bus.rstn) w <= 'd0;
     else if(request) begin
         for(int i = 0; i < 16; ++i) begin
-            if(request & req_mode_2_32) w[15-i][31:0] <= bus.msg.w32[i];
+            if(request & (req_mode_1 | req_mode_2_32)) w[15-i].w32[0] <= bus.msg.w32[i];
             else if(request & req_mode_2_64) w[15-i] <= bus.msg.w64[i];
         end
     end
     else if(cnt >= 'd15) w <= {next_w, w[15:1]};
 
+assign req_mode_1 = bus.mode == sha::sha1;
 assign req_mode_2_32 = bus.mode == sha::sha224 || bus.mode == sha::sha256;
 assign req_mode_2_64 = bus.mode == sha::sha384 || bus.mode == sha::sha512 ||
         bus.mode == sha::sha512_224 || bus.mode == sha::sha512_256;
+assign mode_1 = mode == sha::sha1;
 assign mode_2_32 = mode == sha::sha224 || mode == sha::sha256;
 assign mode_2_64 = mode == sha::sha384 || mode == sha::sha512 ||
         mode == sha::sha512_224 || mode == sha::sha512_256;
@@ -145,7 +160,7 @@ always_comb begin
         st_idle:
             if(bus.valid & req_mode_2_32)
                 next_state = st_loop256;
-            else if(bus.valid & req_mode_2_64)
+            else if(bus.valid & (req_mode_1 | req_mode_2_64))
                 next_state = st_loop512;
             else
                 next_state = st_idle;
@@ -163,7 +178,7 @@ always_comb begin
             if(bus.valid) begin
                 if(req_mode_2_32)
                     next_state = st_loop256;
-                else if(req_mode_2_64)
+                else if(req_mode_1 | req_mode_2_64)
                     next_state = st_loop512;
             end
             else
@@ -181,9 +196,14 @@ always_ff @ (posedge bus.clk, negedge bus.rstn)
     else if(done) cnt <= 'd0;
     else if(cnt_en) cnt <= cnt + 'd1;
 
-always_comb begin
+always_comb begin : sha_calc_next_w
+    next_w_xor = w[13] ^ w[8] ^ w[2] ^ w[0];
     next_w_plus =  w[0] + w[9];
-    if(cnt >= 'd15 && mode_2_32) begin
+    if(cnt >= 'd15 && mode_1) begin
+        next_w.w32[1] = 'd0;
+        next_w.w32[0] = {next_w_xor[30:0], next_w_xor[31:31]};
+    end
+    else if(cnt >= 'd15 && mode_2_32) begin
         next_w.w32[1] = 'd0;
         next_w.w32[0] = sha::delta0_32(w[1]) + sha::delta1_32(w[14]) + next_w_plus;
     end
@@ -193,16 +213,17 @@ always_comb begin
         next_w = 'd0;
 end
 
-always_comb begin
+always_comb begin : sha_mainloop_vars_init
     sha_mainloop_if_h.master.enable = state == st_loop256 || state == st_loop512;
     sha_mainloop_if_h.master.mode = mode;
+    sha_mainloop_if_h.master.ft = cnt / 20;
     if(cnt < 'd16)
         sha_mainloop_if_h.master.w = w[cnt];
     else
         sha_mainloop_if_h.master.w = w[15];
     unique case(mode)
         sha::sha1: begin
-                sha_mainloop_if_h.master.k = 'd0;
+            sha_mainloop_if_h.master.k = {32'd0, K1[cnt/20]};
         end
         sha::sha224,
         sha::sha256: begin
@@ -229,7 +250,8 @@ always_comb begin
     hash = 'd0;
     unique case(mode)
         sha::sha1:
-            hash = 'd0;
+            for(int i = 0; i < 5; ++i)
+                hash.w32[4-i] = next_h_work[i];
         sha::sha224:
             for(int i = 0; i < 7; ++i)
                 hash.w32[6-i] = next_h_work[i];
