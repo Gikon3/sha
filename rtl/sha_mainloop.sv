@@ -2,19 +2,26 @@ module sha_mainloop (
     sha_mainloop_if.slave bus
 );
 
+logic[31:0]             temp_plus;
 sha::word_t             temp1_plus;
 sha::word_t             temp2_plus;
 sha::word_t             temp1;
 sha::word_t             temp2;
 sha::mainloop_word_t    next_words;
 
-always_comb begin
+always_comb begin : sha_temp_val_formation
+    unique case(bus.ft)
+        2'd0: temp_plus = sha::ch(bus.raw.ch.b, bus.raw.ch.c, bus.raw.ch.d);
+        2'd1,
+        2'd3: temp_plus = sha::parity(bus.raw.ch.b, bus.raw.ch.c, bus.raw.ch.d);
+        2'd2: temp_plus = sha::maj(bus.raw.ch.b, bus.raw.ch.c, bus.raw.ch.d);
+    endcase
     temp1_plus = bus.raw.ch.h + sha::ch(bus.raw.ch.e, bus.raw.ch.f, bus.raw.ch.g) + bus.k + bus.w;
     temp2_plus = sha::maj(bus.raw.ch.a, bus.raw.ch.b, bus.raw.ch.c);
     unique case(bus.mode)
         sha::sha1: begin
-            temp1 = 0;
-            temp2 = 0;
+            temp1 = {bus.raw.ch.a[26:0], bus.raw.ch.a[31:27]} + temp_plus + bus.raw.ch.e + bus.w + bus.k;
+            temp2 = 64'd0;
         end
         sha::sha224,
         sha::sha256: begin
@@ -31,17 +38,17 @@ always_comb begin
     endcase
 end
 
-always_comb begin
+always_comb begin : sha_next_out_formation
     unique case(bus.mode)
         sha::sha1: begin
-            next_words.ch.a = 0;
-            next_words.ch.b = 0;
-            next_words.ch.c = 0;
-            next_words.ch.d = 0;
-            next_words.ch.e = 0;
-            next_words.ch.f = 0;
-            next_words.ch.g = 0;
-            next_words.ch.h = 0;
+            next_words.ch.a = temp1;
+            next_words.ch.b =  bus.raw.ch.a;
+            next_words.ch.c = {32'd0,  bus.raw.ch.b[1:0],  bus.raw.ch.b[31:2]};
+            next_words.ch.d =  bus.raw.ch.c;
+            next_words.ch.e =  bus.raw.ch.d;
+            next_words.ch.f = 64'd0;
+            next_words.ch.g = 64'd0;
+            next_words.ch.h = 64'd0;
         end
         sha::sha224,
         sha::sha256,

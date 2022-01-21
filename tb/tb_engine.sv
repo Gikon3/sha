@@ -25,8 +25,9 @@ end
 
 initial begin
     // Началные значения, чтобы не ругался uniaue case
-    force dut.state = dut.st_idle; release  dut.state;
-    force dut.mode = sha::sha1; release  dut.mode;
+    force dut.cnt = 'd0; release dut.cnt;
+    force dut.state = dut.st_idle; release dut.state;
+    force dut.mode = sha::sha1; release dut.mode;
 end
 
 sha_engine dut (
@@ -37,6 +38,8 @@ initial begin
     wait(sha_engine_if_h.master.rstn == 1'b1);
     @(posedge sha_engine_if_h.master.clk);
 
+    send_msg("Hello World!", sha::sha1,
+            160'h2ef7bde608ce5404e97d5f042f95f89f1c232871);
     send_msg("Hash functions play an important role in modern cryptography. This paper investigates optimisation techniques that have recently \
 been proposed in the literature. A new VLSI architecture for the SHA-256 and SHA-512 hash functions is presented, which combines \
 two popular hardware optimisation techniques, namely pipelining and unrolling. The SHA processors are developed for implementation \
@@ -48,6 +51,13 @@ to compare favourably with other FPGA-based implementations, achieving the faste
             512'h861844d6704e8573fec34d967e20bcfef3d424cf48be04e6dc08f2bd58c729743371015ead891cc3cf1c9d34b49264b510751b1ff9e537937bc46b5d6ff4ecc8);
     send_msg("Hello World!", sha::sha384,
             384'hbfd76c0ebbd006fee583410547c1887b0292be76d582d96c242d2a792723e3fd6fd061f9d5cfd13b8f961358e6adba4a);
+    send_msg("Hash functions play an important role in modern cryptography. This paper investigates optimisation techniques that have recently \
+been proposed in the literature. A new VLSI architecture for the SHA-256 and SHA-512 hash functions is presented, which combines \
+two popular hardware optimisation techniques, namely pipelining and unrolling. The SHA processors are developed for implementation \
+on FPGAs, thereby allowing rapid prototyping of several designs. Speed/area results from these processors are analysed and are shown \
+to compare favourably with other FPGA-based implementations, achieving the fastest data throughputs in the literature to date.",
+            sha::sha1,
+            160'h3509aee67e9a991289d77d4631ef7c475d99c144);
     send_msg("Hello World!", sha::sha512_256,
             256'hf371319eee6b39b058ec262d4e723a26710e46761301c8b54c56fa722267581a);
     #1 wait(sha_engine_if_h.master.ready == 1'b1);
@@ -122,6 +132,7 @@ task send_msg;
         block = 'd0;
         msg_len_tail = msg.len();
         case(mode)
+            sha::sha1,
             sha::sha224,
             sha::sha256: begin
                 num_blocks = msg.len() / byte_in_block512;
@@ -196,6 +207,7 @@ task send_block;
         sha_engine_if_h.master.mode = mode;
         sha_engine_if_h.master.msg = 'd0;
         case(mode)
+            sha::sha1,
             sha::sha224,
             sha::sha256:
                 sha_engine_if_h.master.msg = {512'd0, block[511:0]};
