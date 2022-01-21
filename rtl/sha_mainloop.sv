@@ -9,7 +9,7 @@ sha::word_t             temp1;
 sha::word_t             temp2;
 sha::mainloop_word_t    next_words;
 
-always_comb begin
+always_comb begin : sha_temp_val_formation
     unique case(bus.ft)
         2'd0: temp_plus = sha::ch(bus.raw.ch.b, bus.raw.ch.c, bus.raw.ch.d);
         2'd1,
@@ -21,7 +21,7 @@ always_comb begin
     unique case(bus.mode)
         sha::sha1: begin
             temp1 = {bus.raw.ch.a[26:0], bus.raw.ch.a[31:27]} + temp_plus + bus.raw.ch.e + bus.w + bus.k;
-            temp2 = 0;
+            temp2 = 64'd0;
         end
         sha::sha224,
         sha::sha256: begin
@@ -38,7 +38,7 @@ always_comb begin
     endcase
 end
 
-always_comb begin
+always_comb begin : sha_next_out_formation
     unique case(bus.mode)
         sha::sha1: begin
             next_words.ch.a = temp1;
